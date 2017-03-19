@@ -1,0 +1,7 @@
+*.pyc
+!.gitignore
+.vscode
+job
+log
+*.log
+*.bak
