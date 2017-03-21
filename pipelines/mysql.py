@@ -7,6 +7,7 @@
 from scrapy.utils.misc import load_object
 from scrapy.exceptions import NotConfigured
 from scrapy2.utils.mysqlconnection import get_mysql_from_settings
+from scrapy2.utils.mysqlping import MysqlPing
 from scrapy import signals
 
 
@@ -15,9 +16,11 @@ class MysqlPipeline(object):
     Item into mysql
     """
 
-    def __init__(self, dbpool, pipeline):
+    def __init__(self, dbpool, pipeline, settings):
         self.dbpool = dbpool
         self.pipeline = pipeline
+        self.interval = settings.getfloat('MYSQL_PING_INTERVAL', 8)
+        self.task = MysqlPing(self.dbpool, self.interval)
 
     @classmethod
     def from_settings(cls, settings):
@@ -29,15 +32,20 @@ class MysqlPipeline(object):
         try:
             dbpool = get_mysql_from_settings(settings)
         except Exception as ex:
-            print '%s \nException:%s' % (__file__, ex)
-        return cls(dbpool, pipeline)
+            print '%s \nException:%s' % (__name__, ex)
+        return cls(dbpool, pipeline, settings)
 
     @classmethod
     def from_crawler(cls, crawler):
         o = cls.from_settings(crawler.settings)
         crawler.signals.connect(
+            o.engine_started, signal=signals.engine_started)
+        crawler.signals.connect(
             o.engine_stopped, signal=signals.engine_stopped)
         return o
+
+    def engine_started(self):
+        pass
 
     def engine_stopped(self):
         self.dbpool.close()
@@ -54,10 +62,11 @@ class MysqlPipeline(object):
             # operation (deferred) has finished.
             return d
         except Exception as ex:
-            print '%s process_item \nException:%s' % (__file__, ex)
+            print '%s process_item \nException:%s' % (__name__, ex)
         return item
 
     def _handle_error(self, failure, item, spider):
         """Handle occurred on db interaction."""
         # do nothing, just log
         spider.logger.err(failure)
+
